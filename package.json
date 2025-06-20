@@ -1,0 +1,21 @@
+{
+  "name": "robot-trial-1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:css": "tailwindcss -i ./index.css -o ./style.css --watch"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "three": "^0.177.0"
+  }
+}
