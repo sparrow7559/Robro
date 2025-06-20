@@ -22,7 +22,7 @@ const platform = new THREE.Mesh(
   new THREE.BoxGeometry(100, 0.2, 100),
   new THREE.MeshStandardMaterial({ color: 0x888888 })
 );
-platform.position.y = -1;
+platform.position.y = -1.275;
 scene.add(platform);
 
 // Controls
@@ -37,7 +37,7 @@ let keys = { w: false, a: false, s: false, d: false, shift: false };
 
 // Load Robro
 const originalRotations = {};
-
+const loader = new GLTFLoader();
 loader.load('Robro6.glb', (gltf) => {
   robro = gltf.scene;
   robro.rotation.y = -Math.PI / 2;
