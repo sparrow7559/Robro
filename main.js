@@ -68,7 +68,6 @@ function simulateJointWalk() {
   if (!robro) return;
 
   const t = clock.getElapsedTime() * 4;
-  const base = 1.4;
 
   const parts = {
     leftThigh: robro.getObjectByName("LeftThigh"),
@@ -79,24 +78,26 @@ function simulateJointWalk() {
     rightShoulder: robro.getObjectByName("RightShoulder")
   };
 
-  if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, Math.sin(t) * 0.3);
-  if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, Math.sin(t + Math.PI) * 0.3);
-  if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, Math.sin(t + Math.PI) * 0.15);
-  if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, Math.sin(t) * 0.15);
+  // Legs swinging forward-backward
+  const legSwing = Math.sin(t) * 0.3;
+  const footLift = Math.cos(t) * 0.15;
 
-  const baseDown = 0; // use neutral if arm is rotated backward initially
+  if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, legSwing);
+  if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, -legSwing);
+  if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, -footLift);
+  if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, footLift);
 
-if (parts.leftShoulder) {
-    // Try .z first — this often works when x fails
-    parts.leftShoulder.rotation.set(0, 0, baseDown + Math.sin(t + Math.PI) * 0.6);
+  // Arms: swing opposite to legs
+  const armSwing = Math.sin(t) * 0.6;
+
+  if (parts.leftShoulder) {
+    parts.leftShoulder.rotation.set(0, 0, -armSwing);  // Opposite of left leg
+  }
+  if (parts.rightShoulder) {
+    parts.rightShoulder.rotation.set(0, 0, armSwing);  // Opposite of right leg
+  }
 }
 
-if (parts.rightShoulder) {
-    // Invert swing and maybe flip sign for mirrored bone
-    parts.rightShoulder.rotation.set(0, 0, baseDown - Math.sin(t) * 0.6);
-}
-
-}
 
 function resetIdlePose() {
   for (const [name, rot] of Object.entries(originalRotations)) {
