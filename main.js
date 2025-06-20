@@ -22,13 +22,13 @@ const platform = new THREE.Mesh(
   new THREE.BoxGeometry(100, 0.2, 100),
   new THREE.MeshStandardMaterial({ color: 0x888888 })
 );
-platform.position.y = -1;
+platform.position.y = -1.5;
 scene.add(platform);
 
 // Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1, 0);
-controls.update();
+// const controls = new OrbitControls(camera, renderer.domElement);
+// controls.target.set(0, 1, 0);
+// controls.update();
 
 // Robot
 let robro = null;
@@ -112,38 +112,57 @@ function updateRobotMovement() {
   if (!robro) return;
 
   const moveDir = new THREE.Vector3();
-  if (keys.w) moveDir.z -= 1;
-  if (keys.s) moveDir.z += 1;
-  if (keys.a) moveDir.x -= 1;
-  if (keys.d) moveDir.x += 1;
+if (keys.w) moveDir.z -= 1;
+if (keys.s) moveDir.z += 1;
+if (keys.a) moveDir.x -= 1;
+if (keys.d) moveDir.x += 1;
 
-  if (moveDir.length() > 0) {
-    moveDir.normalize();
-    const speed = keys.shift ? 0.1 : 0.05;
+if (moveDir.length() > 0) {
+  moveDir.normalize();
 
-    const localDir = moveDir.clone().applyQuaternion(robro.quaternion);
-    robro.position.add(localDir.multiplyScalar(speed));
+  // 🔁 Transform movement relative to camera
+  const camQuat = camera.quaternion.clone();
+  const camDir = moveDir.clone().applyQuaternion(camQuat);
+  camDir.y = 0; // stay level
+  camDir.normalize();
 
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      moveDir.clone().normalize()
-    );
-    robro.quaternion.slerp(targetQuat, 0.2);
+  const speed = keys.shift ? 0.1 : 0.05;
+  robro.position.add(camDir.clone().multiplyScalar(speed));
 
-    simulateJointWalk();
-  } else {
-    resetIdlePose();
-  }
+  // Face movement direction
+  const targetQuat = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 0, 1),
+    camDir
+  );
+  robro.quaternion.slerp(targetQuat, 0.2);
+
+  simulateJointWalk();
+} else {
+  resetIdlePose();
+}
+
 }
 
 // Animation Loop
 function animate() {
   requestAnimationFrame(animate);
+
   updateRobotMovement();
-  controls.update();
+
+  if (robro) {
+    const followOffset = new THREE.Vector3(0, 6, -12); // 🔁 updated distance
+    const robotWorldPos = new THREE.Vector3();
+    robro.getWorldPosition(robotWorldPos);
+
+    const desiredCameraPos = followOffset.clone().applyQuaternion(robro.quaternion).add(robotWorldPos);
+
+    camera.position.lerp(desiredCameraPos, 0.1);  // smooth follow
+    camera.lookAt(robotWorldPos.clone().add(new THREE.Vector3(0, 2, 0))); // look at chest/head
+  }
+
   renderer.render(scene, camera);
-  console.log("animation loop");
-  
 }
+
+
 
 animate();
