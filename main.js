@@ -120,7 +120,7 @@ function updateRobotMovement() {
   if (keys.a) moveDir.x -= 1;
   if (keys.d) moveDir.x += 1;
 
-  if (moveDir.length() > 0) {
+  if (moveDir.length() > 0 && isOnGround) {
     moveDir.normalize();
 
     const camQuat = camera.quaternion.clone();
@@ -138,22 +138,44 @@ function updateRobotMovement() {
     robro.quaternion.slerp(targetQuat, 0.2);
 
     simulateJointWalk();
-  } else {
+  } else if (isOnGround) {
     resetIdlePose();
   }
 
-  // Jump logic
+  // Jump logic and animation
   if (!isOnGround) {
     velocityY += gravity;
     robro.position.y += velocityY;
+
+    // 🔁 Jump pose animation
+    const leftThigh = robro.getObjectByName("LeftThigh");
+    const rightThigh = robro.getObjectByName("RightThigh");
+    const leftShoulder = robro.getObjectByName("LeftShoulder");
+    const rightShoulder = robro.getObjectByName("RightShoulder");
+
+    if (leftThigh && originalRotations["LeftThigh"])
+      leftThigh.rotation.x = originalRotations["LeftThigh"].x + THREE.MathUtils.degToRad(20);
+
+    if (rightThigh && originalRotations["RightThigh"])
+      rightThigh.rotation.x = originalRotations["RightThigh"].x + THREE.MathUtils.degToRad(20);
+
+    if (leftShoulder && originalRotations["LeftShoulder"])
+      leftShoulder.rotation.x = originalRotations["LeftShoulder"].x - THREE.MathUtils.degToRad(30);
+
+    if (rightShoulder && originalRotations["RightShoulder"])
+      rightShoulder.rotation.x = originalRotations["RightShoulder"].x - THREE.MathUtils.degToRad(30);
+
+
 
     if (robro.position.y <= -0.8) {
       robro.position.y = -0.8;
       velocityY = 0;
       isOnGround = true;
+      resetIdlePose();
     }
   }
 }
+
 
 // Animation Loop
 function animate() {
