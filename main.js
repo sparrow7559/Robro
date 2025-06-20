@@ -35,6 +35,9 @@ let robro = null;
 const clock = new THREE.Clock();
 let keys = { w: false, a: false, s: false, d: false, shift: false };
 
+const originalRotations = {};
+
+
 // Load Robro
 const loader = new GLTFLoader();
 loader.load('Robro6.glb', (gltf) => {
@@ -43,7 +46,14 @@ loader.load('Robro6.glb', (gltf) => {
   robro.position.set(0, -0.8, 0);
   robro.scale.set(1, 1, 1);
   scene.add(robro);
-}, undefined, console.error);
+  ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder"].forEach(name => {
+    const part = robro.getObjectByName(name);
+    if (part) originalRotations[name] = part.rotation.clone();
+  });
+  resetIdlePose();;
+}, undefined, (error) => {
+  console.error("Failed to load Robro:", error);
+});
 
 // Input
 window.addEventListener('keydown', (e) => {
@@ -89,17 +99,12 @@ if (parts.rightShoulder) {
 }
 
 function resetIdlePose() {
-  const base = 1.4;
-  const parts = [
-    "LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder"
-  ];
-  parts.forEach(name => {
+  for (const [name, rot] of Object.entries(originalRotations)) {
     const part = robro.getObjectByName(name);
-    if (!part) return;
-    if (name.includes("Shoulder")) part.rotation.set(base, 0, 0);
-    else part.rotation.set(0, 0, 0);
-  });
+    if (part) part.rotation.copy(rot);
+  }
 }
+
 
 // Movement Logic
 function updateRobotMovement() {
@@ -136,6 +141,8 @@ function animate() {
   updateRobotMovement();
   controls.update();
   renderer.render(scene, camera);
+  console.log("animation loop");
+  
 }
 
 animate();
