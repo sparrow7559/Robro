@@ -22,7 +22,7 @@ const platform = new THREE.Mesh(
   new THREE.BoxGeometry(100, 0.2, 100),
   new THREE.MeshStandardMaterial({ color: 0x888888 })
 );
-platform.position.y = -1.5;
+platform.position.y = -1.275;
 scene.add(platform);
 
 // Controls
