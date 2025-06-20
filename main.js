@@ -8,6 +8,7 @@ scene.background = new THREE.Color(0x87ceeb);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 5, 10);
+// camera.position.set(10, 5, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -26,31 +27,43 @@ platform.position.y = -1.275;
 scene.add(platform);
 
 // Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1, 0);
-controls.update();
+// const controls = new OrbitControls(camera, renderer.domElement);
+// controls.target.set(0, 1, 0);
+// controls.update();
 
 // Robot
 let robro = null;
 const clock = new THREE.Clock();
 let keys = { w: false, a: false, s: false, d: false, shift: false };
 
-// Load Robro
 const originalRotations = {};
+
+
+// Load Robro
 const loader = new GLTFLoader();
 loader.load('Robro6.glb', (gltf) => {
   robro = gltf.scene;
-  robro.rotation.y = -Math.PI / 2;
+  // robro.rotation.y = -Math.PI / 2;  // ⬅️ rotate to make Z+ forwar
+  // robro.rotation.y = -Math.PI / 2;  // ✅ Rotate from +Z to +X
+  // robro.children.forEach(child => {
+  //   child.rotation.y = -Math.PI / 2;
+  // });
+  
+
+
   robro.position.set(0, -0.8, 0);
   robro.scale.set(1, 1, 1);
   scene.add(robro);
-
-  // Save initial joint rotations
+  console.log(robro);
   ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder"].forEach(name => {
     const part = robro.getObjectByName(name);
     if (part) originalRotations[name] = part.rotation.clone();
   });
-}, undefined, console.error);
+  resetIdlePose();;
+}, undefined, (error) => {
+  console.error("Failed to load Robro:", error);
+});
+
 
 
 // Input
@@ -66,7 +79,6 @@ function simulateJointWalk() {
   if (!robro) return;
 
   const t = clock.getElapsedTime() * 4;
-  const base = 1.4;
 
   const parts = {
     leftThigh: robro.getObjectByName("LeftThigh"),
@@ -77,24 +89,26 @@ function simulateJointWalk() {
     rightShoulder: robro.getObjectByName("RightShoulder")
   };
 
-  if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, Math.sin(t) * 0.3);
-  if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, Math.sin(t + Math.PI) * 0.3);
-  if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, Math.sin(t + Math.PI) * 0.15);
-  if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, Math.sin(t) * 0.15);
+  // Legs swinging forward-backward
+  const legSwing = Math.sin(t) * 0.3;
+  const footLift = Math.cos(t) * 0.15;
 
-  const baseDown = 0; // use neutral if arm is rotated backward initially
+  if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, legSwing);
+  if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, -legSwing);
+  if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, -footLift);
+  if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, footLift);
 
-if (parts.leftShoulder) {
-    // Try .z first — this often works when x fails
-    parts.leftShoulder.rotation.set(0, 0, baseDown + Math.sin(t + Math.PI) * 0.6);
+  // Arms: swing opposite to legs
+  const armSwing = Math.sin(t) * 0.6;
+
+  if (parts.leftShoulder) {
+    parts.leftShoulder.rotation.set(0, 0, -armSwing);  // Opposite of left leg
+  }
+  if (parts.rightShoulder) {
+    parts.rightShoulder.rotation.set(0, 0, armSwing);  // Opposite of right leg
+  }
 }
 
-if (parts.rightShoulder) {
-    // Invert swing and maybe flip sign for mirrored bone
-    parts.rightShoulder.rotation.set(0, 0, baseDown - Math.sin(t) * 0.6);
-}
-
-}
 
 function resetIdlePose() {
   for (const [name, rot] of Object.entries(originalRotations)) {
@@ -109,36 +123,62 @@ function updateRobotMovement() {
   if (!robro) return;
 
   const moveDir = new THREE.Vector3();
-  if (keys.w) moveDir.z -= 1;
-  if (keys.s) moveDir.z += 1;
-  if (keys.a) moveDir.x -= 1;
-  if (keys.d) moveDir.x += 1;
+if (keys.w) moveDir.z -= 1;
+if (keys.s) moveDir.z += 1;
+if (keys.a) moveDir.x -= 1;
+if (keys.d) moveDir.x += 1;
 
-  if (moveDir.length() > 0) {
-    moveDir.normalize();
-    const speed = keys.shift ? 0.1 : 0.05;
+if (moveDir.length() > 0) {
+  moveDir.normalize();
 
-    const localDir = moveDir.clone().applyQuaternion(robro.quaternion);
-    robro.position.add(localDir.multiplyScalar(speed));
+  // 🔁 Transform movement relative to camera
+  const camQuat = camera.quaternion.clone();
+  const camDir = moveDir.clone().applyQuaternion(camQuat);
+  camDir.y = 0; // stay level
+  camDir.normalize();
 
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      moveDir.clone().normalize()
-    );
-    robro.quaternion.slerp(targetQuat, 0.2);
+  const speed = keys.shift ? 0.7 : 0.5;
+  robro.position.add(camDir.clone().multiplyScalar(speed));
 
-    simulateJointWalk();
-  } else {
-    resetIdlePose();
-  }
+  // Face movement direction
+  const targetQuat = new THREE.Quaternion().setFromUnitVectors(
+  new THREE.Vector3(1, 0, 0), // ✅ because robot originally faces +X
+  camDir
+);
+
+  robro.quaternion.slerp(targetQuat, 0.2);
+  
+
+  simulateJointWalk();
+} else {
+  resetIdlePose();
+}
+
 }
 
 // Animation Loop
 function animate() {
   requestAnimationFrame(animate);
+
   updateRobotMovement();
-  controls.update();
+
+  if (robro) {
+    const followOffset = new THREE.Vector3(-10, 10, 0); // 🔁 updated distance
+    const robotWorldPos = new THREE.Vector3();
+    robro.getWorldPosition(robotWorldPos);
+
+    const desiredCameraPos = followOffset.clone().applyQuaternion(robro.quaternion).add(robotWorldPos);
+
+    camera.position.lerp(desiredCameraPos, 0.1);  // smooth follow
+    camera.lookAt(robotWorldPos.clone().add(new THREE.Vector3(0, 2, 0))); // look at chest/head
+  }
+  // camera.position.set(-10, 10, 0);
+  // camera.lookAt(0, 0, 0);
+
+
   renderer.render(scene, camera);
 }
+
+
 
 animate();
