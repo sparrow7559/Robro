@@ -78,7 +78,7 @@ window.addEventListener('keyup', (e) => {
 function simulateJointWalk() {
   if (!robro) return;
 
-  const t = clock.getElapsedTime() * 4;
+  const t = clock.getElapsedTime() * 6; // Slightly faster cycle
 
   const parts = {
     leftThigh: robro.getObjectByName("LeftThigh"),
@@ -89,8 +89,13 @@ function simulateJointWalk() {
     rightShoulder: robro.getObjectByName("RightShoulder")
   };
 
-  const legSwing = Math.sin(t) * 0.3;
-  const footLift = Math.cos(t) * 0.15;
+  const speedFactor = keys.shift ? 1.0 : 0.6; // match the robot's physical speed
+
+  // const legSwing = Math.sin(t) * 0.15 * speedFactor;
+  const legSwing = Math.sin(t) * 0.4 * speedFactor;
+  // const footLift = Math.cos(t) * 0.05 * speedFactor;
+  const footLift = Math.cos(t) * 0.25 * speedFactor;
+  // const armSwing = Math.sin(t) * 0.3 * speedFactor;
 
   if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, legSwing);
   if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, -legSwing);
@@ -153,17 +158,29 @@ function updateRobotMovement() {
     const leftShoulder = robro.getObjectByName("LeftShoulder");
     const rightShoulder = robro.getObjectByName("RightShoulder");
 
-    if (leftThigh && originalRotations["LeftThigh"])
-      leftThigh.rotation.x = originalRotations["LeftThigh"].x + THREE.MathUtils.degToRad(20);
+    // if (leftThigh && originalRotations["LeftThigh"])
+    //   leftThigh.rotation.z = originalRotations["LeftThigh"].z - THREE.MathUtils.degToRad(20);
 
-    if (rightThigh && originalRotations["RightThigh"])
-      rightThigh.rotation.x = originalRotations["RightThigh"].x + THREE.MathUtils.degToRad(20);
+    // if (rightThigh && originalRotations["RightThigh"])
+    //   rightThigh.rotation.z = originalRotations["RightThigh"].z - THREE.MathUtils.degToRad(20);
 
     if (leftShoulder && originalRotations["LeftShoulder"])
-      leftShoulder.rotation.x = originalRotations["LeftShoulder"].x - THREE.MathUtils.degToRad(30);
+      leftShoulder.rotation.z = originalRotations["LeftShoulder"].z - THREE.MathUtils.degToRad(30);
 
     if (rightShoulder && originalRotations["RightShoulder"])
-      rightShoulder.rotation.x = originalRotations["RightShoulder"].x - THREE.MathUtils.degToRad(30);
+      rightShoulder.rotation.z = originalRotations["RightShoulder"].z - THREE.MathUtils.degToRad(30);
+
+    // if (leftThigh && originalRotations["LeftThigh"])
+    //   leftThigh.rotation.x = originalRotations["LeftThigh"].x + THREE.MathUtils.degToRad(20);
+
+    // if (rightThigh && originalRotations["RightThigh"])
+    //   rightThigh.rotation.x = originalRotations["RightThigh"].x + THREE.MathUtils.degToRad(20);
+
+    // if (leftShoulder && originalRotations["LeftShoulder"])
+    //   leftShoulder.rotation.x = originalRotations["LeftShoulder"].x - THREE.MathUtils.degToRad(30);
+
+    // if (rightShoulder && originalRotations["RightShoulder"])
+    //   rightShoulder.rotation.x = originalRotations["RightShoulder"].x - THREE.MathUtils.degToRad(30);
 
 
 
