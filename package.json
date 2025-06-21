@@ -9,9 +9,7 @@
     "build": "npm run build:css && vite build",
     "preview": "vite preview",
     "build:css": "tailwindcss -i ./index.css -o ./style.css --watch",
-    "build:three":"npm i three",
-    "predeploy":"npm run build && npm run build:css && npm build:three",
-    "deploy":"gh-pages -d dist"  
+    "build:three":"npm i three"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
