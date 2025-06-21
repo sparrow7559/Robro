@@ -142,67 +142,57 @@ function resetIdlePose() {
 function updateRobotMovement() {
   if (!robro) return;
 
-  const moveDir = new THREE.Vector3();
-  if (keys.w) moveDir.z -= 1;
-  if (keys.s) moveDir.z += 1;
-  if (keys.a) moveDir.x -= 0.3;
-  if (keys.d) moveDir.x += 0.3;
+  const speed = keys.shift ? 0.7 : 0.4;
+  let moveStep = new THREE.Vector3();
 
-  if (moveDir.length() > 0 && isOnGround && !isPreparingJump) {
-    moveDir.normalize();
+  // Define robot's forward direction
+  const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(robro.quaternion);
+  // const forward = new THREE.Vector3(0, 0, -1)
+  forward.y = 0;
+  forward.normalize();
 
-    const camQuat = camera.quaternion.clone();
-    const camDir = moveDir.clone().applyQuaternion(camQuat);
-    camDir.y = 0;
-    camDir.normalize();
+  // Handle movement keys
+  if (keys.w) moveStep.add(forward.clone().multiplyScalar(speed));
+  if (keys.s) moveStep.add(forward.clone().multiplyScalar(-speed));
 
-    const speed = keys.shift ? 0.7 : 0.4;
-    const moveStep = camDir.clone().multiplyScalar(speed);
+  // Handle rotation with A/D
+  if (keys.a) robro.rotation.y += 0.05;
+  if (keys.d) robro.rotation.y -= 0.05;
 
-    // Save air momentum
-    airMoveVector.copy(moveStep);
+  // Only move if on ground and not preparing jump
+  const isMoving = (keys.w || keys.s);
 
-
-    // Prepare robot box for collision
-    robotBox.setFromObject(robro);
+  if (isMoving && isOnGround && !isPreparingJump) {
+    // Collision-aware movement
     const futurePosition = robro.position.clone().add(moveStep);
+    robotBox.setFromObject(robro);
     robotBox.translate(moveStep);
-
     const willCollide = robotBox.intersectsBox(wallBox);
-
+  
     if (!willCollide) {
-      robro.position.copy(futurePosition);
+      robro.position.add(moveStep);  // Move step by step
+      airMoveVector.copy(moveStep); // Save for jump inertia
     }
-
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(1, 0, 0),
-      camDir
-    );
-    robro.quaternion.slerp(targetQuat, 0.2);
-
-    simulateJointWalk();
+  
+    simulateJointWalk();  // Animate walk
   } else if (isOnGround && !isPreparingJump) {
-    resetIdlePose();
+    resetIdlePose();  // Reset legs if idle
   }
+  
 
-  // Jump logic
+  // Jump physics
   if (!isOnGround) {
     velocityY += gravity;
     robro.position.y += velocityY;
-  
-    // Apply horizontal inertia
+
     robro.position.add(airMoveVector.clone());
-  
-    // Optional: slight damping for realism
-    airMoveVector.multiplyScalar(0.98);  // Dampen inertia slowly
-  
+    airMoveVector.multiplyScalar(0.98); // Dampen slowly
 
     const leftShoulder = robro.getObjectByName("LeftShoulder");
     const rightShoulder = robro.getObjectByName("RightShoulder");
 
     if (leftShoulder && originalRotations["LeftShoulder"])
       leftShoulder.rotation.z = originalRotations["LeftShoulder"].z - THREE.MathUtils.degToRad(30);
-
     if (rightShoulder && originalRotations["RightShoulder"])
       rightShoulder.rotation.z = originalRotations["RightShoulder"].z - THREE.MathUtils.degToRad(30);
 
@@ -214,6 +204,7 @@ function updateRobotMovement() {
     }
   }
 }
+
 
 // Animation Loop
 function animate() {
