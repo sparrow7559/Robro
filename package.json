@@ -1,15 +1,13 @@
 {
   "name": "robot-trial-1",
-  "homepage":"https://sparrow7559.github.io/Robro/",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:css && vite build",
+    "build": "vite build",
     "preview": "vite preview",
-    "build:css": "tailwindcss -i ./index.css -o ./style.css --watch",
-    "build:three":"npm i three"
+    "build:css": "tailwindcss -i ./index.css -o ./style.css --watch"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
@@ -18,7 +16,6 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
-    "gh-pages": "^6.3.0",
     "three": "^0.177.0"
   }
 }

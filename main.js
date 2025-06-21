@@ -1,7 +1,7 @@
-// import * as THREE from 'three';
-// import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
+// import { GLTFLoader } from 'https://unpkg.com/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 
 
 // Scene setup
@@ -137,10 +137,23 @@ function updateRobotMovement() {
   if (!robro) return;
 
   const moveDir = new THREE.Vector3();
-  if (keys.w) moveDir.z -= 1;
-  if (keys.s) moveDir.z += 1;
-  if (keys.a) moveDir.x -= 1;
-  if (keys.d) moveDir.x += 1;
+  if (keys.w){
+    console.log("Forward");
+    moveDir.z -= 1;} 
+  if (keys.s){
+    moveDir.z += 1;
+    console.log("reverse");
+  }
+  if (keys.a){
+    moveDir.x -= 1;
+    console.log("Left");
+    
+  }
+  if (keys.d){
+    moveDir.x += 1;
+    console.log("Right");
+    
+  }
 
   if (moveDir.length() > 0 && isOnGround && !isPreparingJump) {
     moveDir.normalize();
