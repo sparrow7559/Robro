@@ -1,8 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-// import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
-// import { GLTFLoader } from 'https://unpkg.com/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
-
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -27,10 +24,25 @@ const platform = new THREE.Mesh(
 platform.position.y = -1.275;
 scene.add(platform);
 
+// Wall (obstacle)
+const wall = new THREE.Mesh(
+  new THREE.BoxGeometry(3, 4, 0.5),
+  new THREE.MeshStandardMaterial({ color: 0xff4444 })
+);
+wall.position.set(0, 0.8, -5);  // in front of starting point
+scene.add(wall);
+
+// Collision bounding boxes
+const robotBox = new THREE.Box3();
+const wallBox = new THREE.Box3().setFromObject(wall);
+
 // Robot and input
 let robro = null;
 const clock = new THREE.Clock();
 let keys = { w: false, a: false, s: false, d: false, shift: false };
+
+let airMoveVector = new THREE.Vector3();
+
 
 // Jump physics
 let velocityY = 0;
@@ -49,9 +61,8 @@ loader.load('Robro6.glb', (gltf) => {
   robro.position.set(0, -0.8, 0);
   robro.scale.set(1, 1, 1);
   scene.add(robro);
-  console.log(robro);
 
-  ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder","RightLeg","LeftLeg"].forEach(name => {
+  ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder", "RightLeg", "LeftLeg"].forEach(name => {
     const part = robro.getObjectByName(name);
     if (part) originalRotations[name] = part.rotation.clone();
   });
@@ -69,17 +80,12 @@ window.addEventListener('keydown', (e) => {
   // Pre-jump crouch logic
   if (e.code === 'Space' && isOnGround && !isPreparingJump) {
     isPreparingJump = true;
-    console.log("Jumping");
-    
 
     const leftleg = robro.getObjectByName("LeftLeg");
     const rightleg = robro.getObjectByName("RightLeg");
 
     if (leftleg) leftleg.rotation.z += THREE.MathUtils.degToRad(-25);
     if (rightleg) rightleg.rotation.z += THREE.MathUtils.degToRad(-25);
-    // if (leftfoot) leftThigh.rotation.z += THREE.MathUtils.degToRad(25);
-    // if (rightfoot) rightThigh.rotation.z += THREE.MathUtils.degToRad(25);
-    // robro.position.y -= 0.2;
 
     setTimeout(() => {
       velocityY = jumpStrength;
@@ -101,7 +107,7 @@ function simulateJointWalk() {
   if (!robro) return;
 
   const t = clock.getElapsedTime() * 6;
-  const speedFactor = keys.shift ? 1.0 : 0.6;
+  const speedFactor = keys.shift ? 0.7 : 0.4;
 
   const parts = {
     leftThigh: robro.getObjectByName("LeftThigh"),
@@ -132,28 +138,15 @@ function resetIdlePose() {
   }
 }
 
-// Movement Logic
+// Movement Logic with Collision Check
 function updateRobotMovement() {
   if (!robro) return;
 
   const moveDir = new THREE.Vector3();
-  if (keys.w){
-    console.log("Forward");
-    moveDir.z -= 1;} 
-  if (keys.s){
-    moveDir.z += 1;
-    console.log("reverse");
-  }
-  if (keys.a){
-    moveDir.x -= 1;
-    console.log("Left");
-    
-  }
-  if (keys.d){
-    moveDir.x += 1;
-    console.log("Right");
-    
-  }
+  if (keys.w) moveDir.z -= 1;
+  if (keys.s) moveDir.z += 1;
+  if (keys.a) moveDir.x -= 0.3;
+  if (keys.d) moveDir.x += 0.3;
 
   if (moveDir.length() > 0 && isOnGround && !isPreparingJump) {
     moveDir.normalize();
@@ -163,8 +156,23 @@ function updateRobotMovement() {
     camDir.y = 0;
     camDir.normalize();
 
-    const speed = keys.shift ? 0.7 : 0.5;
-    robro.position.add(camDir.clone().multiplyScalar(speed));
+    const speed = keys.shift ? 0.7 : 0.4;
+    const moveStep = camDir.clone().multiplyScalar(speed);
+
+    // Save air momentum
+    airMoveVector.copy(moveStep);
+
+
+    // Prepare robot box for collision
+    robotBox.setFromObject(robro);
+    const futurePosition = robro.position.clone().add(moveStep);
+    robotBox.translate(moveStep);
+
+    const willCollide = robotBox.intersectsBox(wallBox);
+
+    if (!willCollide) {
+      robro.position.copy(futurePosition);
+    }
 
     const targetQuat = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(1, 0, 0),
@@ -181,6 +189,13 @@ function updateRobotMovement() {
   if (!isOnGround) {
     velocityY += gravity;
     robro.position.y += velocityY;
+  
+    // Apply horizontal inertia
+    robro.position.add(airMoveVector.clone());
+  
+    // Optional: slight damping for realism
+    airMoveVector.multiplyScalar(0.98);  // Dampen inertia slowly
+  
 
     const leftShoulder = robro.getObjectByName("LeftShoulder");
     const rightShoulder = robro.getObjectByName("RightShoulder");
@@ -210,7 +225,15 @@ function animate() {
     const robotWorldPos = new THREE.Vector3();
     robro.getWorldPosition(robotWorldPos);
 
-    const desiredCameraPos = followOffset.clone().applyQuaternion(robro.quaternion).add(robotWorldPos);
+    if (keys.s && !keys.w) {
+      followOffset.set(15, 10, 0); // Move in front of robot
+    }
+  
+
+    const rotatedOffset = followOffset.clone().applyQuaternion(robro.quaternion);
+
+    // const desiredCameraPos = followOffset.clone().applyQuaternion(robro.quaternion).add(robotWorldPos);
+    const desiredCameraPos = robotWorldPos.clone().add(rotatedOffset);
     camera.position.lerp(desiredCameraPos, 0.1);
     camera.lookAt(robotWorldPos.clone().add(new THREE.Vector3(0, 2, 0)));
   }
