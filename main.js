@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -35,6 +34,8 @@ let velocityY = 0;
 let isOnGround = true;
 const gravity = -0.03;
 const jumpStrength = 0.65;
+let isPreparingJump = false;
+const crouchDuration = 200;
 
 const originalRotations = {};
 
@@ -47,7 +48,7 @@ loader.load('Robro6.glb', (gltf) => {
   scene.add(robro);
   console.log(robro);
 
-  ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder"].forEach(name => {
+  ["LeftThigh", "RightThigh", "LeftFoot", "RightFoot", "LeftShoulder", "RightShoulder","RightLeg","LeftLeg"].forEach(name => {
     const part = robro.getObjectByName(name);
     if (part) originalRotations[name] = part.rotation.clone();
   });
@@ -62,10 +63,28 @@ window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (keys.hasOwnProperty(key)) keys[key] = true;
 
-  // Jump on Spacebar
-  if (e.code === 'Space' && isOnGround) {
-    velocityY = jumpStrength;
-    isOnGround = false;
+  // Pre-jump crouch logic
+  if (e.code === 'Space' && isOnGround && !isPreparingJump) {
+    isPreparingJump = true;
+    console.log("Jumping");
+    
+
+    const leftleg = robro.getObjectByName("LeftLeg");
+    const rightleg = robro.getObjectByName("RightLeg");
+
+    if (leftleg) leftleg.rotation.z += THREE.MathUtils.degToRad(-25);
+    if (rightleg) rightleg.rotation.z += THREE.MathUtils.degToRad(-25);
+    // if (leftfoot) leftThigh.rotation.z += THREE.MathUtils.degToRad(25);
+    // if (rightfoot) rightThigh.rotation.z += THREE.MathUtils.degToRad(25);
+    // robro.position.y -= 0.2;
+
+    setTimeout(() => {
+      velocityY = jumpStrength;
+      isOnGround = false;
+      isPreparingJump = false;
+      robro.position.y += 0.2;
+      resetIdlePose();
+    }, crouchDuration);
   }
 });
 
@@ -78,7 +97,8 @@ window.addEventListener('keyup', (e) => {
 function simulateJointWalk() {
   if (!robro) return;
 
-  const t = clock.getElapsedTime() * 6; // Slightly faster cycle
+  const t = clock.getElapsedTime() * 6;
+  const speedFactor = keys.shift ? 1.0 : 0.6;
 
   const parts = {
     leftThigh: robro.getObjectByName("LeftThigh"),
@@ -89,20 +109,14 @@ function simulateJointWalk() {
     rightShoulder: robro.getObjectByName("RightShoulder")
   };
 
-  const speedFactor = keys.shift ? 1.0 : 0.6; // match the robot's physical speed
-
-  // const legSwing = Math.sin(t) * 0.15 * speedFactor;
   const legSwing = Math.sin(t) * 0.4 * speedFactor;
-  // const footLift = Math.cos(t) * 0.05 * speedFactor;
   const footLift = Math.cos(t) * 0.25 * speedFactor;
-  // const armSwing = Math.sin(t) * 0.3 * speedFactor;
+  const armSwing = Math.sin(t) * 0.6;
 
   if (parts.leftThigh) parts.leftThigh.rotation.set(0, 0, legSwing);
   if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, -legSwing);
   if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, -footLift);
   if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, footLift);
-
-  const armSwing = Math.sin(t) * 0.6;
 
   if (parts.leftShoulder) parts.leftShoulder.rotation.set(0, 0, -armSwing);
   if (parts.rightShoulder) parts.rightShoulder.rotation.set(0, 0, armSwing);
@@ -125,7 +139,7 @@ function updateRobotMovement() {
   if (keys.a) moveDir.x -= 1;
   if (keys.d) moveDir.x += 1;
 
-  if (moveDir.length() > 0 && isOnGround) {
+  if (moveDir.length() > 0 && isOnGround && !isPreparingJump) {
     moveDir.normalize();
 
     const camQuat = camera.quaternion.clone();
@@ -143,46 +157,23 @@ function updateRobotMovement() {
     robro.quaternion.slerp(targetQuat, 0.2);
 
     simulateJointWalk();
-  } else if (isOnGround) {
+  } else if (isOnGround && !isPreparingJump) {
     resetIdlePose();
   }
 
-  // Jump logic and animation
+  // Jump logic
   if (!isOnGround) {
     velocityY += gravity;
     robro.position.y += velocityY;
 
-    // 🔁 Jump pose animation
-    const leftThigh = robro.getObjectByName("LeftThigh");
-    const rightThigh = robro.getObjectByName("RightThigh");
     const leftShoulder = robro.getObjectByName("LeftShoulder");
     const rightShoulder = robro.getObjectByName("RightShoulder");
-
-    // if (leftThigh && originalRotations["LeftThigh"])
-    //   leftThigh.rotation.z = originalRotations["LeftThigh"].z - THREE.MathUtils.degToRad(20);
-
-    // if (rightThigh && originalRotations["RightThigh"])
-    //   rightThigh.rotation.z = originalRotations["RightThigh"].z - THREE.MathUtils.degToRad(20);
 
     if (leftShoulder && originalRotations["LeftShoulder"])
       leftShoulder.rotation.z = originalRotations["LeftShoulder"].z - THREE.MathUtils.degToRad(30);
 
     if (rightShoulder && originalRotations["RightShoulder"])
       rightShoulder.rotation.z = originalRotations["RightShoulder"].z - THREE.MathUtils.degToRad(30);
-
-    // if (leftThigh && originalRotations["LeftThigh"])
-    //   leftThigh.rotation.x = originalRotations["LeftThigh"].x + THREE.MathUtils.degToRad(20);
-
-    // if (rightThigh && originalRotations["RightThigh"])
-    //   rightThigh.rotation.x = originalRotations["RightThigh"].x + THREE.MathUtils.degToRad(20);
-
-    // if (leftShoulder && originalRotations["LeftShoulder"])
-    //   leftShoulder.rotation.x = originalRotations["LeftShoulder"].x - THREE.MathUtils.degToRad(30);
-
-    // if (rightShoulder && originalRotations["RightShoulder"])
-    //   rightShoulder.rotation.x = originalRotations["RightShoulder"].x - THREE.MathUtils.degToRad(30);
-
-
 
     if (robro.position.y <= -0.8) {
       robro.position.y = -0.8;
@@ -193,11 +184,9 @@ function updateRobotMovement() {
   }
 }
 
-
 // Animation Loop
 function animate() {
   requestAnimationFrame(animate);
-
   updateRobotMovement();
 
   if (robro) {
