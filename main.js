@@ -71,6 +71,25 @@ loader.load('Robro6.glb', (gltf) => {
 }, undefined, (error) => {
   console.error("Failed to load Robro:", error);
 });
+// Terrain integration
+const terrainLoader = new GLTFLoader();
+const terrainMeshes = []; // keep it global if not already
+
+terrainLoader.load('UnevenTerrain.glb', (gltf) => {
+  const terrain = gltf.scene;
+  terrain.scale.set(10, 5, 10);
+  terrain.position.set(0, -1.275, 0); // Align with ground
+  scene.add(terrain);
+
+  terrain.traverse((child) => {
+    if (child.isMesh) {
+      terrainMeshes.push(child);
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+});
+
 
 // Input
 window.addEventListener('keydown', (e) => {
@@ -203,6 +222,23 @@ function updateRobotMovement() {
       resetIdlePose();
     }
   }
+  //terrain logic
+  // Terrain-following height adjustment (simulate climb)
+if (robro) {
+  const raycaster = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+  const robotFeet = robro.position.clone();
+  raycaster.set(robotFeet, down);
+
+  const intersects = raycaster.intersectObjects(terrainMeshes, true);
+  if (intersects.length > 0) {
+    const terrainY = intersects[0].point.y + 0.8; // add robot height offset
+    const deltaY = terrainY - robro.position.y;
+
+    // Smoothly climb up/down small elevation changes
+    if (Math.abs(deltaY) < 1.2) {//1.2
+      robro.position.y += deltaY * 0.2; // 0.2 = smooth interpolation
+    }}};
 }
 
 
@@ -233,3 +269,6 @@ function animate() {
 }
 
 animate();
+
+//Chote Platform se bade platform jaa pa raha hai 
+//skipping big platform (fix)
