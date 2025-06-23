@@ -239,6 +239,27 @@ if (robro) {
     if (Math.abs(deltaY) < 1.2) {//1.2
       robro.position.y += deltaY * 0.2; // 0.2 = smooth interpolation
     }}};
+
+// ✅ TERRAIN FOLLOWING (LOOK-AHEAD TO CLIMB BIGGER BLOCKS)
+// if (robro) {
+//   const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(robro.quaternion).setY(0).normalize();
+//   const aheadFeet = robro.position.clone().add(forward.multiplyScalar(0.6)); // look ahead
+
+//   const raycaster = new THREE.Raycaster(aheadFeet, new THREE.Vector3(0, -1, 0));
+//   const intersects = raycaster.intersectObjects(terrainMeshes, true);
+
+//   if (intersects.length > 0) {
+//     const terrainY = intersects[0].point.y + 0.8;
+//     const deltaY = terrainY - robro.position.y;
+
+//     // ✅ Climb higher blocks smoothly
+//     if (deltaY < 1.5 && deltaY > -.5) {
+//       robro.position.y += deltaY * 0.2;
+//     }
+//   }
+// }
+
+
 }
 
 
