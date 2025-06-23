@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
@@ -11,12 +10,10 @@ camera.position.set(0, 5, 10);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Lighting
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 7.5);
 scene.add(light);
 
-// Ground
 const platform = new THREE.Mesh(
   new THREE.BoxGeometry(100, 0.2, 100),
   new THREE.MeshStandardMaterial({ color: 0x888888 })
@@ -24,37 +21,28 @@ const platform = new THREE.Mesh(
 platform.position.y = -1.275;
 scene.add(platform);
 
-// Wall (obstacle)
 const wall = new THREE.Mesh(
   new THREE.BoxGeometry(3, 4, 0.5),
   new THREE.MeshStandardMaterial({ color: 0xff4444 })
 );
-wall.position.set(0, 0.8, -5);  // in front of starting point
+wall.position.set(0, 0.8, -5);
 scene.add(wall);
 
-// Collision bounding boxes
 const robotBox = new THREE.Box3();
 const wallBox = new THREE.Box3().setFromObject(wall);
 
-// Robot and input
 let robro = null;
 const clock = new THREE.Clock();
 let keys = { w: false, a: false, s: false, d: false, shift: false };
-
 let airMoveVector = new THREE.Vector3();
-
-
-// Jump physics
 let velocityY = 0;
 let isOnGround = true;
 const gravity = -0.03;
 const jumpStrength = 0.65;
 let isPreparingJump = false;
 const crouchDuration = 200;
-
 const originalRotations = {};
 
-// Load Robro
 const loader = new GLTFLoader();
 loader.load('Robro6.glb', (gltf) => {
   robro = gltf.scene;
@@ -68,35 +56,41 @@ loader.load('Robro6.glb', (gltf) => {
   });
 
   resetIdlePose();
-}, undefined, (error) => {
-  console.error("Failed to load Robro:", error);
-});
-// Terrain integration
+}, undefined, console.error);
+
 const terrainLoader = new GLTFLoader();
-const terrainMeshes = []; // keep it global if not already
+const terrainTiles = [];
+let baseTile;
+const tileSize = 20;
+const scaleFactor = 5;
+// const scaleFactor =10;
+const tileRepeat = 3;
 
 terrainLoader.load('UnevenTerrain.glb', (gltf) => {
-  const terrain = gltf.scene;
-  terrain.scale.set(10, 5, 10);
-  terrain.position.set(0, -1.275, 0); // Align with ground
-  scene.add(terrain);
-
-  terrain.traverse((child) => {
-    if (child.isMesh) {
-      terrainMeshes.push(child);
-      child.castShadow = true;
-      child.receiveShadow = true;
-    }
-  });
+  baseTile = gltf.scene;
+  baseTile.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  createTerrainGrid();
 });
 
+function createTerrainGrid() {
+  // Only spawn one terrain tile, positioned a bit away from spawn
+  const tile = baseTile.clone(true);
+  tile.position.set(70, -1.4, 0); // 10 units away on x-axis
+  scene.add(tile);
+  terrainTiles.push(tile);
+}
 
-// Input
+function resetIdlePose() {
+  for (const [name, rot] of Object.entries(originalRotations)) {
+    const part = robro.getObjectByName(name);
+    if (part) part.rotation.copy(rot);
+  }
+}
+
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (keys.hasOwnProperty(key)) keys[key] = true;
 
-  // Pre-jump crouch logic
   if (e.code === 'Space' && isOnGround && !isPreparingJump) {
     isPreparingJump = true;
 
@@ -121,7 +115,6 @@ window.addEventListener('keyup', (e) => {
   if (keys.hasOwnProperty(key)) keys[key] = false;
 });
 
-// Joint Animation
 function simulateJointWalk() {
   if (!robro) return;
 
@@ -145,67 +138,86 @@ function simulateJointWalk() {
   if (parts.rightThigh) parts.rightThigh.rotation.set(0, 0, -legSwing);
   if (parts.leftFoot) parts.leftFoot.rotation.set(0, 0, -footLift);
   if (parts.rightFoot) parts.rightFoot.rotation.set(0, 0, footLift);
-
   if (parts.leftShoulder) parts.leftShoulder.rotation.set(0, 0, -armSwing);
   if (parts.rightShoulder) parts.rightShoulder.rotation.set(0, 0, armSwing);
 }
 
-function resetIdlePose() {
-  for (const [name, rot] of Object.entries(originalRotations)) {
-    const part = robro.getObjectByName(name);
-    if (part) part.rotation.copy(rot);
-  }
-}
-
-// Movement Logic with Collision Check
 function updateRobotMovement() {
-  if (!robro) return;
+  if (!robro || terrainTiles.length === 0) return;
 
   const speed = keys.shift ? 0.7 : 0.4;
   let moveStep = new THREE.Vector3();
-
-  // Define robot's forward direction
   const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(robro.quaternion);
-  // const forward = new THREE.Vector3(0, 0, -1)
   forward.y = 0;
   forward.normalize();
 
-  // Handle movement keys
   if (keys.w) moveStep.add(forward.clone().multiplyScalar(speed));
   if (keys.s) moveStep.add(forward.clone().multiplyScalar(-speed));
-
-  // Handle rotation with A/D
   if (keys.a) robro.rotation.y += 0.05;
   if (keys.d) robro.rotation.y -= 0.05;
 
-  // Only move if on ground and not preparing jump
   const isMoving = (keys.w || keys.s);
 
+  // --- CLIMB/STEP LOGIC START ---
+  const waistHeight = 0.8; // Adjust as needed for your model
+  let canMove = true;
+  let smoothStepTargetY = null;
+
   if (isMoving && isOnGround && !isPreparingJump) {
-    // Collision-aware movement
+    const moveDirection = moveStep.clone().normalize();
+    if (moveDirection.length() > 0) {
+      const rayOrigin = robro.position.clone();
+      rayOrigin.y += 0.1; // Just above ground
+      const raycaster = new THREE.Raycaster(rayOrigin, moveDirection, 0, speed + 0.6);
+      const obstacles = [wall, ...terrainTiles];
+      const hits = raycaster.intersectObjects(obstacles, true);
+      if (hits.length > 0) {
+        // Find the highest y among all hits in the move direction
+        let maxY = -Infinity;
+        let minDistance = Infinity;
+        let bestHit = null;
+        for (const hit of hits) {
+          if (hit.distance < minDistance) {
+            minDistance = hit.distance;
+            maxY = hit.point.y;
+            bestHit = hit;
+          }
+        }
+        const robotWaistY = robro.position.y + waistHeight;
+        if (maxY < robotWaistY) {
+          // Smoothly step up
+          smoothStepTargetY = maxY;
+        } else {
+          canMove = false; // Block movement
+        }
+      }
+    }
+  }
+
+  if (isMoving && isOnGround && !isPreparingJump) {
     const futurePosition = robro.position.clone().add(moveStep);
     robotBox.setFromObject(robro);
     robotBox.translate(moveStep);
     const willCollide = robotBox.intersectsBox(wallBox);
-  
-    if (!willCollide) {
-      robro.position.add(moveStep);  // Move step by step
-      airMoveVector.copy(moveStep); // Save for jump inertia
-    }
-  
-    simulateJointWalk();  // Animate walk
-  } else if (isOnGround && !isPreparingJump) {
-    resetIdlePose();  // Reset legs if idle
-  }
-  
 
-  // Jump physics
+    if (canMove && !willCollide) {
+      if (smoothStepTargetY !== null) {
+        // Smoothly interpolate Y to the step height
+        robro.position.y += (smoothStepTargetY - robro.position.y) * 0.2;
+      }
+      robro.position.add(moveStep);
+      airMoveVector.copy(moveStep);
+    }
+    simulateJointWalk();
+  } else if (isOnGround && !isPreparingJump) {
+    resetIdlePose();
+  }
+
   if (!isOnGround) {
     velocityY += gravity;
     robro.position.y += velocityY;
-
     robro.position.add(airMoveVector.clone());
-    airMoveVector.multiplyScalar(0.98); // Dampen slowly
+    airMoveVector.multiplyScalar(0.98);
 
     const leftShoulder = robro.getObjectByName("LeftShoulder");
     const rightShoulder = robro.getObjectByName("RightShoulder");
@@ -222,48 +234,33 @@ function updateRobotMovement() {
       resetIdlePose();
     }
   }
-  //terrain logic
-  // Terrain-following height adjustment (simulate climb)
-if (robro) {
-  const raycaster = new THREE.Raycaster();
-  const down = new THREE.Vector3(0, -1, 0);
-  const robotFeet = robro.position.clone();
-  raycaster.set(robotFeet, down);
 
-  const intersects = raycaster.intersectObjects(terrainMeshes, true);
-  if (intersects.length > 0) {
-    const terrainY = intersects[0].point.y + 0.8; // add robot height offset
-    const deltaY = terrainY - robro.position.y;
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(robro.position.x, 20, robro.position.z),
+    new THREE.Vector3(0, -1, 0)
+  );
+  let intersections = [];
+  for (let tile of terrainTiles) {
+    const hits = raycaster.intersectObject(tile, true);
+    if (hits.length > 0) intersections.push(...hits);
+  }
 
-    // Smoothly climb up/down small elevation changes
-    if (Math.abs(deltaY) < 1.2) {//1.2
-      robro.position.y += deltaY * 0.2; // 0.2 = smooth interpolation
-    }}};
-
-// ✅ TERRAIN FOLLOWING (LOOK-AHEAD TO CLIMB BIGGER BLOCKS)
-// if (robro) {
-//   const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(robro.quaternion).setY(0).normalize();
-//   const aheadFeet = robro.position.clone().add(forward.multiplyScalar(0.6)); // look ahead
-
-//   const raycaster = new THREE.Raycaster(aheadFeet, new THREE.Vector3(0, -1, 0));
-//   const intersects = raycaster.intersectObjects(terrainMeshes, true);
-
-//   if (intersects.length > 0) {
-//     const terrainY = intersects[0].point.y + 0.8;
-//     const deltaY = terrainY - robro.position.y;
-
-//     // ✅ Climb higher blocks smoothly
-//     if (deltaY < 1.5 && deltaY > -.5) {
-//       robro.position.y += deltaY * 0.2;
-//     }
-//   }
-// }
-
-
+  if (intersections.length > 0) {
+    intersections.sort((a, b) => a.distance - b.distance);
+    const terrainY = intersections[0].point.y;
+  
+    // Use a fixed offset to keep the robot slightly above terrain
+    const robotFootOffset = 0.8; // You can tweak this for your model
+    const targetY = terrainY + robotFootOffset;
+    const deltaY = targetY - robro.position.y;
+  
+    if (Math.abs(deltaY) < 1.5) {
+      robro.position.y += deltaY * 0.2;
+    }
+  }
+  
 }
 
-
-// Animation Loop
 function animate() {
   requestAnimationFrame(animate);
   updateRobotMovement();
@@ -274,13 +271,10 @@ function animate() {
     robro.getWorldPosition(robotWorldPos);
 
     if (keys.s && !keys.w) {
-      followOffset.set(15, 10, 0); // Move in front of robot
+      followOffset.set(15, 10, 0);
     }
-  
 
     const rotatedOffset = followOffset.clone().applyQuaternion(robro.quaternion);
-
-    // const desiredCameraPos = followOffset.clone().applyQuaternion(robro.quaternion).add(robotWorldPos);
     const desiredCameraPos = robotWorldPos.clone().add(rotatedOffset);
     camera.position.lerp(desiredCameraPos, 0.1);
     camera.lookAt(robotWorldPos.clone().add(new THREE.Vector3(0, 2, 0)));
@@ -290,6 +284,3 @@ function animate() {
 }
 
 animate();
-
-//Chote Platform se bade platform jaa pa raha hai 
-//skipping big platform (fix)
