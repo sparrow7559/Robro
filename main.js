@@ -73,16 +73,11 @@ terrainLoader.load('UnevenTerrain.glb', (gltf) => {
 });
 
 function createTerrainGrid() {
-  const half = Math.floor(tileRepeat / 2);
-  const tileSpacing = tileSize * scaleFactor * 0.99;
-  for (let i = -half; i <= half; i++) {
-    for (let j = -half; j <= half; j++) {
-      const tile = baseTile.clone(true);
-      tile.position.set(i * tileSpacing, -0.8, j * tileSpacing);
-      scene.add(tile);
-      terrainTiles.push(tile);
-    }
-  }
+  // Only spawn one terrain tile, positioned a bit away from spawn
+  const tile = baseTile.clone(true);
+  tile.position.set(70, -1.4, 0); // 10 units away on x-axis
+  scene.add(tile);
+  terrainTiles.push(tile);
 }
 
 function resetIdlePose() {
